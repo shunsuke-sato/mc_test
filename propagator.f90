@@ -2,16 +2,16 @@ module global_variables
   implicit none
   real(8),parameter :: pi = 4d0*atan(1d0)
   integer,parameter :: ndim = 10
-  real(8),parameter :: dt = 0.0d0
+  real(8),parameter :: dt = 0.25d0
   real(8) :: x_ho(ndim)
-  integer,parameter :: Niter_MC = 10000
+  integer,parameter :: Niter_MC = 1000000
 
 end module global_variables
 program main
   use global_variables
   implicit none
   integer,parameter :: Nx = 256
-  integer,parameter :: nmax = 0
+  integer,parameter :: nmax = 6
   real(8),parameter :: xmin = -6d0,xmax= 6d0,dx = (xmax-xmin)/Nx
   integer :: ix,iter
   real(8) :: xx
@@ -38,7 +38,7 @@ program main
   zs = 0d0
   ss = 0d0
   do iter = 1,Niter_MC
-    write(*,*)iter
+    if(mod(iter,Niter_MC/100) == 0)write(*,*)iter,dble(iter)*100d0/dble(Niter_MC)
     call Metropolis_update(x_ho,ndim,dt,nmax)
 
     zf  = exp(-0.5d0*(x_ho(1)/1d0)**2)*exp(-0.5d0*(x_ho(10)/1d0)**2)/(sqrt(pi)*1d0) &
@@ -46,16 +46,16 @@ program main
       * propagator_HO(x_ho(3),x_ho( 2),nmax,dt) &
       * propagator_HO(x_ho(4),x_ho( 3),nmax,dt) &
       * propagator_HO(x_ho(5),x_ho( 4),nmax,dt) &
-      * propagator_HO(x_ho(7),x_ho( 6),nmax,dt) &
-      * propagator_HO(x_ho(8),x_ho( 7),nmax,dt) &
-      * propagator_HO(x_ho(9),x_ho( 8),nmax,dt) &
-      * propagator_HO(x_ho(10),x_ho(9),nmax,dt)
+      * propagator_HO(x_ho(6),x_ho( 7),nmax,-dt) &
+      * propagator_HO(x_ho(7),x_ho( 8),nmax,-dt) &
+      * propagator_HO(x_ho(8),x_ho( 9),nmax,-dt) &
+      * propagator_HO(x_ho(9),x_ho(10),nmax,-dt)
 
 
     zs = zs + zf/abs(zf) &
       * exp(-0.5d0*(x_ho(5)/1d0)**2)*exp(-0.5d0*(x_ho(6)/1d0)**2)/(sqrt(pi)*1d0)
 
-    ss = ss + exp(-0.5d0*sum(x_ho(:)**2))/abs(zf)/(sqrt(2d0*pi))**10
+    ss = ss + exp(-sum(x_ho(:)**2))/abs(zf)/(sqrt(pi))**10
 
   end do
   zs = zs/Niter_MC
@@ -132,10 +132,10 @@ subroutine Metropolis_update(x_ho,ndim,dt,nmax)
                       * propagator_HO(x_ho(3),x_ho( 2),nmax,dt) &
                       * propagator_HO(x_ho(4),x_ho( 3),nmax,dt) &
                       * propagator_HO(x_ho(5),x_ho( 4),nmax,dt) &
-                      * propagator_HO(x_ho(6),x_ho( 7),nmax,dt) &
-                      * propagator_HO(x_ho(7),x_ho( 8),nmax,dt) &
-                      * propagator_HO(x_ho(8),x_ho( 9),nmax,dt) &
-                      * propagator_HO(x_ho(9),x_ho(10),nmax,dt))
+                      * propagator_HO(x_ho(6),x_ho( 7),nmax,-dt) &
+                      * propagator_HO(x_ho(7),x_ho( 8),nmax,-dt) &
+                      * propagator_HO(x_ho(8),x_ho( 9),nmax,-dt) &
+                      * propagator_HO(x_ho(9),x_ho(10),nmax,-dt))
 
 
 
@@ -156,7 +156,7 @@ function propagator_HO(x1,x2,nmax,dt) result(z)
 
   z = 0d0
   ss = 1d0
-  do n = 0,nmax
+  do n = 0, nmax
     eps = dble(n) + 0.5d0
 
     ss = ss*2d0**min(n,1)*max(n,1)
