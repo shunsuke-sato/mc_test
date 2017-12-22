@@ -4,7 +4,7 @@ module global_variables
   integer,parameter :: ndim = 10
   real(8),parameter :: dt = 0.25d0
   real(8) :: x_ho(ndim)
-  integer,parameter :: Niter_MC = 1000000
+  integer,parameter :: Niter_MC = 10000
 
 end module global_variables
 program main
@@ -38,7 +38,10 @@ program main
   zs = 0d0
   ss = 0d0
   do iter = 1,Niter_MC
-    if(mod(iter,Niter_MC/100) == 0)write(*,*)iter,dble(iter)*100d0/dble(Niter_MC)
+     if(mod(iter,Niter_MC/50) == 0)then
+        write(*,*)iter,dble(iter)*100d0/dble(Niter_MC)
+        write(*,*)zs/ss
+     end if
     call Metropolis_update(x_ho,ndim,dt,nmax)
 
     zf  = exp(-0.5d0*(x_ho(1)/1d0)**2)*exp(-0.5d0*(x_ho(10)/1d0)**2)/(sqrt(pi)*1d0) &
@@ -98,6 +101,7 @@ subroutine Metropolis_update(x_ho,ndim,dt,nmax)
 !    if(n_accept == 100)exit
   end do
 
+  x_ho = x_ho_old
 !  write(*,*)"niter=",niter
 !  write(*,*)"n_accept=",n_accept
 !  write(*,*)"acceptance ratio=",100d0*dble(n_accept)/niter,"[%]"
@@ -150,7 +154,7 @@ function propagator_HO(x1,x2,nmax,dt) result(z)
   real(8) :: x1,x2,dt
   integer :: nmax
   complex(8) :: z
-  integer :: n
+  integer :: n,i
   real(8) :: ss,eps
   real(8) :: Hermite_polynomials
 
@@ -159,7 +163,11 @@ function propagator_HO(x1,x2,nmax,dt) result(z)
   do n = 0, nmax
     eps = dble(n) + 0.5d0
 
-    ss = ss*2d0**min(n,1)*max(n,1)
+    ss = 1d0
+    do i = 1,n
+       ss = ss * 2d0*i
+    end do
+!    ss = ss*2d0**min(n,1)*max(n,1)
 
     z = z + Hermite_polynomials(x1,n)*Hermite_polynomials(x2,n)/ss &
       *sqrt(1d0/pi)*exp(-0.5d0*x1**2)*exp(-0.5d0*x2**2) &
