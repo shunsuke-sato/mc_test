@@ -1,26 +1,33 @@
 module global_variables
   implicit none
+  real(8),parameter :: sigma = 2d0
   real(8),parameter :: pi = 4d0*atan(1d0)
   integer,parameter :: ndim = 10
   real(8),parameter :: dt = 0.25d0
   real(8) :: x_ho(ndim)
-  integer,parameter :: Niter_MC = 10000
+  integer,parameter :: Niter_MC = 100000
+
+  logical :: replica_shift = .true.
 
 end module global_variables
 program main
   use global_variables
   implicit none
   integer,parameter :: Nx = 256
-  integer,parameter :: nmax = 6
+  integer,parameter :: nmax = 4
   real(8),parameter :: xmin = -6d0,xmax= 6d0,dx = (xmax-xmin)/Nx
-  integer :: ix,iter
+  integer :: ix,iter,i
   real(8) :: xx
   complex(8) :: zs1,zs2
   complex(8) :: propagator_HO
   complex(8) :: zf, gg
   complex(8) :: zs
   real(8)    :: ss
+  real(8) :: x_ho_org(ndim),dx_ho, norm
+  complex(8) :: zs_store(Niter_MC),zs_ave
+  real(8)    :: sigma_zs
 
+  dx_ho = 0.14d0 !sqrt(pi/(2d0*dble(ndim)))
 
   open(20,file='out.out')
   do ix = 0,Nx
@@ -40,11 +47,93 @@ program main
   do iter = 1,Niter_MC
      if(mod(iter,Niter_MC/50) == 0)then
         write(*,*)iter,dble(iter)*100d0/dble(Niter_MC)
-        write(*,*)zs/ss
+        write(*,*)zs/ss,zs/iter,ss/iter
      end if
     call Metropolis_update(x_ho,ndim,dt,nmax)
 
-    zf  = exp(-0.5d0*(x_ho(1)/1d0)**2)*exp(-0.5d0*(x_ho(10)/1d0)**2)/(sqrt(pi)*1d0) &
+
+    if(replica_shift)then
+       x_ho_org = x_ho
+
+       zf  = exp(-0.5d0*(x_ho(1)/sigma)**2)*exp(-0.5d0*(x_ho(10)/sigma)**2)/(sqrt(pi)*sigma) &
+            *propagator_HO(x_ho(2),x_ho( 1),nmax,dt) &
+            * propagator_HO(x_ho(3),x_ho( 2),nmax,dt) &
+            * propagator_HO(x_ho(4),x_ho( 3),nmax,dt) &
+            * propagator_HO(x_ho(5),x_ho( 4),nmax,dt) &
+            * propagator_HO(x_ho(6),x_ho( 7),nmax,-dt) &
+            * propagator_HO(x_ho(7),x_ho( 8),nmax,-dt) &
+            * propagator_HO(x_ho(8),x_ho( 9),nmax,-dt) &
+            * propagator_HO(x_ho(9),x_ho(10),nmax,-dt)
+
+       norm = abs(zf)
+
+!       zs = zs + 0.5d0*zf/norm &
+!            * exp(-0.5d0*(x_ho(5)/sigma)**2)*exp(-0.5d0*(x_ho(6)/sigma)**2)/(sqrt(pi)*sigma)
+       zs_store(iter) = 0.5d0*zf/norm &
+            * exp(-0.5d0*(x_ho(5)/sigma)**2)*exp(-0.5d0*(x_ho(6)/sigma)**2)/(sqrt(pi)*sigma)
+
+       ss = ss + 0.5d0*exp(-sum(x_ho(:)**2))/norm/(sqrt(pi))**10
+
+! forward shift
+       x_ho(2) = x_ho_org(2) + dx_ho
+       x_ho(3) = x_ho_org(3) - dx_ho*2
+       x_ho(4) = x_ho_org(4) + dx_ho
+       x_ho(7) = x_ho_org(7) - dx_ho
+       x_ho(8) = x_ho_org(8) + dx_ho*2
+       x_ho(9) = x_ho_org(9) - dx_ho
+
+
+
+       zf  = exp(-0.5d0*(x_ho(1)/sigma)**2)*exp(-0.5d0*(x_ho(10)/sigma)**2)/(sqrt(pi)*sigma) &
+            *propagator_HO(x_ho(2),x_ho( 1),nmax,dt) &
+            * propagator_HO(x_ho(3),x_ho( 2),nmax,dt) &
+            * propagator_HO(x_ho(4),x_ho( 3),nmax,dt) &
+            * propagator_HO(x_ho(5),x_ho( 4),nmax,dt) &
+            * propagator_HO(x_ho(6),x_ho( 7),nmax,-dt) &
+            * propagator_HO(x_ho(7),x_ho( 8),nmax,-dt) &
+            * propagator_HO(x_ho(8),x_ho( 9),nmax,-dt) &
+            * propagator_HO(x_ho(9),x_ho(10),nmax,-dt)
+
+       zs_store(iter) = zs_store(iter) + 0.25d0*zf/norm &
+            * exp(-0.5d0*(x_ho(5)/sigma)**2)*exp(-0.5d0*(x_ho(6)/sigma)**2)/(sqrt(pi)*sigma)
+
+       ss = ss + 0.25d0*exp(-sum(x_ho(:)**2))/norm/(sqrt(pi))**10
+
+! backward shift
+!       do i = 1,ndim
+!          x_ho(i) = x_ho_org(i) -dx_ho*(-1d0)**i
+!       end do
+
+       x_ho(2) = x_ho_org(2) - dx_ho
+       x_ho(3) = x_ho_org(3) + dx_ho*2
+       x_ho(4) = x_ho_org(4) - dx_ho
+       x_ho(7) = x_ho_org(7) + dx_ho
+       x_ho(8) = x_ho_org(8) - dx_ho*2
+       x_ho(9) = x_ho_org(9) + dx_ho
+
+
+       zf  = exp(-0.5d0*(x_ho(1)/sigma)**2)*exp(-0.5d0*(x_ho(10)/sigma)**2)/(sqrt(pi)*sigma) &
+            *propagator_HO(x_ho(2),x_ho( 1),nmax,dt) &
+            * propagator_HO(x_ho(3),x_ho( 2),nmax,dt) &
+            * propagator_HO(x_ho(4),x_ho( 3),nmax,dt) &
+            * propagator_HO(x_ho(5),x_ho( 4),nmax,dt) &
+            * propagator_HO(x_ho(6),x_ho( 7),nmax,-dt) &
+            * propagator_HO(x_ho(7),x_ho( 8),nmax,-dt) &
+            * propagator_HO(x_ho(8),x_ho( 9),nmax,-dt) &
+            * propagator_HO(x_ho(9),x_ho(10),nmax,-dt)
+
+       zs_store(iter) = zs_store(iter) + 0.25d0*zf/norm &
+            * exp(-0.5d0*(x_ho(5)/sigma)**2)*exp(-0.5d0*(x_ho(6)/sigma)**2)/(sqrt(pi)*sigma)
+
+       ss = ss + 0.25d0*exp(-sum(x_ho(:)**2))/norm/(sqrt(pi))**10
+
+       zs = zs + zs_store(iter)
+
+       x_ho = x_ho_org
+
+    else
+
+    zf  = exp(-0.5d0*(x_ho(1)/sigma)**2)*exp(-0.5d0*(x_ho(10)/sigma)**2)/(sqrt(pi)*sigma) &
       *propagator_HO(x_ho(2),x_ho( 1),nmax,dt) &
       * propagator_HO(x_ho(3),x_ho( 2),nmax,dt) &
       * propagator_HO(x_ho(4),x_ho( 3),nmax,dt) &
@@ -56,9 +145,11 @@ program main
 
 
     zs = zs + zf/abs(zf) &
-      * exp(-0.5d0*(x_ho(5)/1d0)**2)*exp(-0.5d0*(x_ho(6)/1d0)**2)/(sqrt(pi)*1d0)
+      * exp(-0.5d0*(x_ho(5)/sigma)**2)*exp(-0.5d0*(x_ho(6)/sigma)**2)/(sqrt(pi)*sigma)
 
     ss = ss + exp(-sum(x_ho(:)**2))/abs(zf)/(sqrt(pi))**10
+
+  end if
 
   end do
   zs = zs/Niter_MC
@@ -66,6 +157,12 @@ program main
 
   write(*,*)"result",zs,ss
   write(*,*)"result",zs/ss
+
+  zs_store = zs_store/ss
+  zs_ave = sum(zs_store)/Niter_MC
+  sigma_zs = sqrt(sum(abs(zs_store - zs_ave)**2)/Niter_MC)
+  write(*,*)"zs_ave",zs_ave
+  write(*,*)"sigma_zs",sigma_zs
   
 end program main
 
@@ -123,23 +220,24 @@ subroutine Metropolis_update(x_ho,ndim,dt,nmax)
       
     end subroutine renew_x_ho
 
-    subroutine calc_weight(x_ho,ndim,weight,dt)
+    subroutine calc_weight(x_ho_t,ndim_t,weight,dt_t)
+      use global_variables
       implicit none
-      integer :: ndim
-      real(8) :: dt
-      real(8) :: x_ho(ndim),weight
+      integer :: ndim_t
+      real(8) :: dt_t
+      real(8) :: x_ho_t(ndim_t),weight
       complex(8) :: propagator_HO
 
-      weight = exp(-0.5d0*(x_ho(1)/1d0)**2)*exp(-0.5d0*(x_ho(10)/1d0)**2)
+      weight = exp(-0.5d0*(x_ho_t(1)/sigma)**2)*exp(-0.5d0*(x_ho_t(10)/sigma)**2)
       weight = weight * abs( &
-                        propagator_HO(x_ho(2),x_ho( 1),nmax,dt) &
-                      * propagator_HO(x_ho(3),x_ho( 2),nmax,dt) &
-                      * propagator_HO(x_ho(4),x_ho( 3),nmax,dt) &
-                      * propagator_HO(x_ho(5),x_ho( 4),nmax,dt) &
-                      * propagator_HO(x_ho(6),x_ho( 7),nmax,-dt) &
-                      * propagator_HO(x_ho(7),x_ho( 8),nmax,-dt) &
-                      * propagator_HO(x_ho(8),x_ho( 9),nmax,-dt) &
-                      * propagator_HO(x_ho(9),x_ho(10),nmax,-dt))
+                        propagator_HO(x_ho_t(2),x_ho_t( 1),nmax,dt_t) &
+                      * propagator_HO(x_ho_t(3),x_ho_t( 2),nmax,dt_t) &
+                      * propagator_HO(x_ho_t(4),x_ho_t( 3),nmax,dt_t) &
+                      * propagator_HO(x_ho_t(5),x_ho_t( 4),nmax,dt_t) &
+                      * propagator_HO(x_ho_t(6),x_ho_t( 7),nmax,-dt_t) &
+                      * propagator_HO(x_ho_t(7),x_ho_t( 8),nmax,-dt_t) &
+                      * propagator_HO(x_ho_t(8),x_ho_t( 9),nmax,-dt_t) &
+                      * propagator_HO(x_ho_t(9),x_ho_t(10),nmax,-dt_t))
 
 
 
@@ -193,7 +291,7 @@ function Hermite_polynomials(x,n) result(y)
   case(3)
     y = 8d0*x**3-12d0*x
   case(4)
-    y = 16d0*x**4-48d0*x**2+12d0
+    y = 16d0*x**4 - 48d0*x**2 + 12d0
   case(5)
     y = 32d0*x**5 - 160d0*x**3 + 120d0*x
   case(6)
